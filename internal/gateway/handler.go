@@ -97,4 +97,3 @@ func requestID(r *http.Request) string {
 	}
 	return "req-unknown"
 }
-

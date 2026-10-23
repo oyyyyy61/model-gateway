@@ -14,15 +14,15 @@ type Instance struct {
 }
 
 type state struct {
-	instance Instance
-	healthy  bool
-	inflight chan struct{}
+	instance      Instance
+	healthy       bool
+	inflight      chan struct{}
 	currentWeight int
 }
 
 type Picker struct {
-	mu         sync.Mutex
-	instances  []*state
+	mu        sync.Mutex
+	instances []*state
 }
 
 func NewPicker(instances []Instance) *Picker {

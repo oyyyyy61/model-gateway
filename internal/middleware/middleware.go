@@ -23,6 +23,7 @@ func requestIDs(next http.Handler) http.Handler {
 		if id == "" {
 			id = newRequestID()
 		}
+		r.Header.Set("X-Request-ID", id)
 		w.Header().Set("X-Request-ID", id)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIDKey, id)))
 	})

@@ -32,12 +32,12 @@ type Proxy struct {
 }
 
 type Result struct {
-	StatusCode     int
-	Result         string
-	Stream         bool
+	StatusCode      int
+	Result          string
+	Stream          bool
 	ResponseStarted bool
-	ResponseBytes  int64
-	FirstByte      time.Duration
+	ResponseBytes   int64
+	FirstByte       time.Duration
 }
 
 func NewProxy(cfg ProxyConfig) *Proxy {
@@ -129,7 +129,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request, model string) 
 }
 
 func requestIsStream(body []byte) bool {
-	var payload struct{ Stream bool `json:"stream"` }
+	var payload struct {
+		Stream bool `json:"stream"`
+	}
 	return json.Unmarshal(body, &payload) == nil && payload.Stream
 }
 
