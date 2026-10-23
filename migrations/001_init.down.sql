@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS request_audits;
+DROP TABLE IF EXISTS model_instances;
+DROP TABLE IF EXISTS tenant_models;
+DROP TABLE IF EXISTS models;
+DROP TABLE IF EXISTS api_keys;
+DROP TABLE IF EXISTS tenants;

@@ -1,0 +1,59 @@
+services:
+  gateway:
+    build: .
+    environment:
+      MGW_LISTEN_ADDR: ":8080"
+      MGW_API_KEY: "mgw_live_demo"
+      MGW_TENANT_ID: "tenant-demo"
+      MGW_ALLOWED_MODELS: "qwen-demo"
+      MGW_UPSTREAMS: "qwen-demo-01|qwen-demo|http://mock-model-1:8080|100|8;qwen-demo-02|qwen-demo|http://mock-model-2:8080|100|8"
+    ports:
+      - "8080:8080"
+    depends_on:
+      mock-model-1:
+        condition: service_healthy
+      mock-model-2:
+        condition: service_healthy
+
+  mock-model-1:
+    build: .
+    entrypoint: ["mock-model"]
+    environment:
+      PORT: "8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  mock-model-2:
+    build: .
+    entrypoint: ["mock-model"]
+    environment:
+      PORT: "8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    profiles: [infra]
+
+  mysql:
+    image: mysql:8.4
+    profiles: [infra]
+    environment:
+      MYSQL_DATABASE: model_gateway
+      MYSQL_USER: model_gateway
+      MYSQL_PASSWORD: model_gateway
+      MYSQL_ROOT_PASSWORD: root
+
+  prometheus:
+    image: prom/prometheus:v3.6.0
+    profiles: [infra]
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
