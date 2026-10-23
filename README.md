@@ -13,7 +13,14 @@
 
 ## 快速启动
 
-宿主机没有安装 Go 时也可以使用 Docker：
+本机已安装 Go 1.24+ 时可以直接运行：
+
+```bash
+go test ./...
+go run ./cmd/gateway
+```
+
+也可以使用 Docker：
 
 ```bash
 docker compose up --build gateway mock-model-1 mock-model-2
@@ -61,6 +68,12 @@ docker compose --profile infra up --build
 ## 测试
 
 ```bash
+go test ./...
+```
+
+在没有 Go 环境的机器上使用 Docker 测试：
+
+```bash
 docker run --rm -v "${PWD}:/src" -w /src golang:1.24-alpine go test ./...
 ```
 
@@ -94,10 +107,4 @@ git status
 
 首次使用 SSH 时，需要先把本机公钥添加到 GitHub 的 **Settings → SSH and GPG keys**。HTTPS 推送需要 GitHub Personal Access Token，账号密码方式已被 GitHub 移除。
 
-如果你希望 Go module 路径与仓库一致，创建 GitHub 仓库后执行：
-
-```bash
-go mod edit -module github.com/<你的用户名>/model-gateway
-```
-
-然后重新运行测试并提交这次 module 路径变更。
+当前 Go module 路径已经与远程仓库保持一致：`github.com/oyyyyy61/model-gateway`。

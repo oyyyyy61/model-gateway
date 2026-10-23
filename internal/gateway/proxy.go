@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"model-gateway/internal/routing"
+	"github.com/oyyyyy61/model-gateway/internal/routing"
 )
 
 var ErrUpstreamUnavailable = errors.New("upstream unavailable")

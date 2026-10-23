@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"model-gateway/internal/auth"
-	"model-gateway/internal/routing"
+	"github.com/oyyyyy61/model-gateway/internal/auth"
+	"github.com/oyyyyy61/model-gateway/internal/routing"
 )
 
 func TestHandlerProxiesJSONAndEnforcesAuth(t *testing.T) {

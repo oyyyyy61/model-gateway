@@ -10,11 +10,11 @@ import (
 	"syscall"
 	"time"
 
-	"model-gateway/internal/auth"
-	"model-gateway/internal/config"
-	"model-gateway/internal/gateway"
-	"model-gateway/internal/middleware"
-	"model-gateway/internal/routing"
+	"github.com/oyyyyy61/model-gateway/internal/auth"
+	"github.com/oyyyyy61/model-gateway/internal/config"
+	"github.com/oyyyyy61/model-gateway/internal/gateway"
+	"github.com/oyyyyy61/model-gateway/internal/middleware"
+	"github.com/oyyyyy61/model-gateway/internal/routing"
 )
 
 func main() {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"model-gateway/internal/auth"
+	"github.com/oyyyyy61/model-gateway/internal/auth"
 )
 
 type Handler struct {
