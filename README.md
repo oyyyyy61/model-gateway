@@ -79,7 +79,7 @@ docker run --rm -v "${PWD}:/src" -w /src golang:1.24-alpine go test ./...
 
 ## 绑定 GitHub
 
-1. 在 GitHub 新建一个空仓库，例如 `model-gateway`。创建时不要添加 README、`.gitignore` 或 license，便于与本地目录合并。
+1. GitHub 仓库地址：`https://github.com/oyyyyy61/model-gateway.git`。
 2. 在本地项目目录执行：
 
 ```bash
@@ -87,14 +87,14 @@ git init
 git add .
 git commit -m "feat: bootstrap model gateway"
 git branch -M main
-git remote add origin https://github.com/<你的用户名>/model-gateway.git
+git remote add origin https://github.com/oyyyyy61/model-gateway.git
 git push -u origin main
 ```
 
 3. 如果使用 SSH：
 
 ```bash
-git remote set-url origin git@github.com:<你的用户名>/model-gateway.git
+git remote set-url origin git@github.com:oyyyyy61/model-gateway.git
 git push -u origin main
 ```
 
