@@ -1,25 +1,33 @@
-// routing.Picker 负责模型实例选择和本地并发控制。每个实例保存健康状态、权重和一个带容量的 channel，channel 充当并发信号量。
-// 请求调用 Acquire 时，Picker 会过滤模型不匹配、不健康或并发已满的实例，再通过平滑加权算法选择实例，并返回一个 release 函数。
-// Proxy 使用 defer release() 确保请求在成功、超时、取消和异常路径下都能释放并发额度。当前健康状态由连接错误触发，自动探测和恢复机制可以作为后续扩展。
-
+// Package routing owns model instance selection, local concurrency limits and
+// the health state used by the proxy and the background health checker.
 package routing
 
 import (
 	"net/url"
+	"sort"
 	"sync"
 )
 
-// 模型实例描述
+// Instance describes one routable model instance.
 type Instance struct {
 	ID          string
 	Model       string
 	Endpoint    string
 	Weight      int
-	// 实例最大并发数，超过该值的请求会被拒绝
 	MaxInflight int
 }
 
-// 实例状态描述，包括实例信息、健康状态、当前并发数和当前权重
+// Snapshot is a point in time view of one instance, safe to return to callers.
+type Snapshot struct {
+	ID          string
+	Model       string
+	Endpoint    string
+	Weight      int
+	MaxInflight int
+	Inflight    int
+	Healthy     bool
+}
+
 type state struct {
 	instance      Instance
 	healthy       bool
@@ -27,62 +35,67 @@ type state struct {
 	currentWeight int
 }
 
+// Picker selects instances with smooth weighted round robin.
 type Picker struct {
-	// 用于保护实例状态的互斥锁，保证并发安全
 	mu        sync.Mutex
 	instances []*state
 }
 
-// 初始化Picker，传入模型实例列表，过滤掉不合法的实例，并为每个实例创建一个状态对象
+// NewPicker validates the configuration and drops unusable instances.
 func NewPicker(instances []Instance) *Picker {
 	states := make([]*state, 0, len(instances))
 	for _, instance := range instances {
-		// 校验实例的Endpoint是否合法，权重和最大并发数是否大于0，如果不合法则跳过该实例
 		parsed, err := url.Parse(instance.Endpoint)
 		if err != nil || parsed.Scheme == "" || parsed.Host == "" || instance.Weight <= 0 || instance.MaxInflight <= 0 {
 			continue
 		}
-		// inflight是一个带缓冲的通道，用于限制实例的最大并发数，缓冲区大小为MaxInflight。chan struct{}，容量为MaxInflight
-		// 可以把它理解为MaxInflight个令牌桶，只有当有空闲的令牌时，才能处理新的请求。每次处理请求时，都会向inflight通道发送一个空结构体{}，表示占用一个并发槽位；处理完请求后，会从inflight通道接收一个空结构体{}，表示释放一个并发槽位。
-		states = append(states, &state{instance: instance, healthy: true, inflight: make(chan struct{}, instance.MaxInflight)})
+		states = append(states, &state{
+			instance: instance,
+			healthy:  true,
+			inflight: make(chan struct{}, instance.MaxInflight),
+		})
 	}
 	return &Picker{instances: states}
 }
 
+// Acquire reserves capacity on a healthy instance of the requested model.
 func (p *Picker) Acquire(model string) (Instance, func(), bool) {
-	// 上锁 防止多请求同时进入更改currentWeight
+	return p.AcquireExcept(model, nil)
+}
+
+// AcquireExcept is Acquire with an exclusion set, used by proxy failover to
+// avoid retrying the instance that just failed.
+func (p *Picker) AcquireExcept(model string, exclude map[string]struct{}) (Instance, func(), bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if len(p.instances) == 0 {
-		return Instance{}, nil, false
-	}
+
 	var selected *state
 	totalWeight := 0
 	for _, candidate := range p.instances {
 		if candidate.instance.Model != model || !candidate.healthy {
 			continue
 		}
-		// 过滤并发已满的实例，如果当前实例的inflight通道已经满了，则跳过该实例，继续选择下一个实例
+		if _, skip := exclude[candidate.instance.ID]; skip {
+			continue
+		}
 		if len(candidate.inflight) >= cap(candidate.inflight) {
 			continue
 		}
-		// 加权选择算法，每个实例的currentWeight会累加它的权重，选择currentWeight最大的实例作为当前请求的目标实例。
-		// 选择后，selected实例的currentWeight会减去所有健康实例的总权重，以保证下次选择时不会一直选择同一个实例。
 		candidate.currentWeight += candidate.instance.Weight
 		totalWeight += candidate.instance.Weight
 		if selected == nil || candidate.currentWeight > selected.currentWeight {
 			selected = candidate
 		}
 	}
-	// 占用一个并发槽位，返回释放函数和选择结果，如果没有可用实例，则返回false
-	if selected != nil {
-		selected.currentWeight -= totalWeight
-		selected.inflight <- struct{}{}
-		return selected.instance, func() { <-selected.inflight }, true
+	if selected == nil {
+		return Instance{}, nil, false
 	}
-	return Instance{}, nil, false
+	selected.currentWeight -= totalWeight
+	selected.inflight <- struct{}{}
+	return selected.instance, func() { <-selected.inflight }, true
 }
 
+// SetHealth updates the routing state for one instance.
 func (p *Picker) SetHealth(instanceID string, healthy bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -93,7 +106,7 @@ func (p *Picker) SetHealth(instanceID string, healthy bool) {
 	}
 }
 
-// 统计指定模型的健康实例数量，返回健康实例的数量
+// Healthy reports how many healthy instances serve the model.
 func (p *Picker) Healthy(model string) int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -104,4 +117,54 @@ func (p *Picker) Healthy(model string) int {
 		}
 	}
 	return count
+}
+
+// HealthyCount reports how many healthy instances exist across all models.
+func (p *Picker) HealthyCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	count := 0
+	for _, candidate := range p.instances {
+		if candidate.healthy {
+			count++
+		}
+	}
+	return count
+}
+
+// Models returns the distinct models in stable order.
+func (p *Picker) Models() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	seen := make(map[string]struct{}, len(p.instances))
+	models := make([]string, 0, len(p.instances))
+	for _, candidate := range p.instances {
+		if _, ok := seen[candidate.instance.Model]; ok {
+			continue
+		}
+		seen[candidate.instance.Model] = struct{}{}
+		models = append(models, candidate.instance.Model)
+	}
+	sort.Strings(models)
+	return models
+}
+
+// Snapshot returns every configured instance, including unhealthy ones.
+func (p *Picker) Snapshot() []Snapshot {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	result := make([]Snapshot, 0, len(p.instances))
+	for _, candidate := range p.instances {
+		result = append(result, Snapshot{
+			ID:          candidate.instance.ID,
+			Model:       candidate.instance.Model,
+			Endpoint:    candidate.instance.Endpoint,
+			Weight:      candidate.instance.Weight,
+			MaxInflight: candidate.instance.MaxInflight,
+			Inflight:    len(candidate.inflight),
+			Healthy:     candidate.healthy,
+		})
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
+	return result
 }

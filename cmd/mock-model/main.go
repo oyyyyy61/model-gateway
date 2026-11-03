@@ -55,6 +55,8 @@ func main() {
 				flusher.Flush()
 				time.Sleep(30 * time.Millisecond)
 			}
+			_, _ = fmt.Fprint(w, "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":4,\"total_tokens\":9}}\n\n")
+			flusher.Flush()
 			_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 			flusher.Flush()
 			return
@@ -74,6 +76,11 @@ func main() {
 				},
 				"finish_reason": "stop",
 			}},
+			"usage": map[string]int{
+				"prompt_tokens":     6,
+				"completion_tokens": 5,
+				"total_tokens":      11,
+			},
 		})
 	})
 

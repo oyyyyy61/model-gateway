@@ -3,7 +3,7 @@ WORKDIR /src
 COPY go.mod ./
 COPY cmd ./cmd
 COPY internal ./internal
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/gateway ./cmd/gateway
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w -X github.com/oyyyyy61/model-gateway/internal/version.Version=0.2.0' -o /out/gateway ./cmd/gateway
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/mock-model ./cmd/mock-model
 
 FROM alpine:3.22

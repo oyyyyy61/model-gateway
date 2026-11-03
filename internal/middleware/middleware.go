@@ -14,7 +14,7 @@ type contextKey string
 const requestIDKey contextKey = "request_id"
 
 func Chain(next http.Handler, logger *slog.Logger) http.Handler {
-	return recovery(logging(requestIDs(next), logger), logger)
+	return recovery(requestIDs(logging(next, logger)), logger)
 }
 
 // 获取请求ID，如果请求头中没有X-Request-ID，则生成一个新的请求ID
