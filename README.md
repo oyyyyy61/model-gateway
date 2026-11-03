@@ -198,13 +198,17 @@ kubectl -n model-gateway create secret generic model-gateway-secrets \
 # 3. 按实际镜像与上游地址修改 configmap.yaml 后部署
 kubectl apply -k deploy/k8s
 
-# 4. 验证
+# 4. 可选：接入 alertment 的飞书告警。
+#    该文件不在 kustomization 中，避免与集群已有路由重复。
+kubectl apply -f deploy/k8s/alertmanagerconfig.yaml
+
+# 5. 验证
 kubectl -n model-gateway get pod,svc,hpa
 kubectl -n model-gateway port-forward svc/model-gateway 8080:80
 ```
 
 部署清单包含 2 副本、滚动发布、HPA、readiness/liveness、非 root、只读根文件系统，
-以及 PodMonitor / PrometheusRule / Grafana Dashboard。
+以及 PodMonitor / PrometheusRule / Grafana Dashboard；AlertmanagerConfig 为可选附件。
 
 ## 与其它仓库的整合
 
