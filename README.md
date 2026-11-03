@@ -44,7 +44,8 @@ flowchart LR
     PR --> AIJ[ai-job-Operator / GPU 指标]
 ```
 
-详细设计见 [架构文档](docs/architecture.md)，分阶段任务见 [路线图](docs/roadmap.md)。
+详细设计见 [架构文档](docs/architecture.md)，分阶段任务见 [路线图](docs/roadmap.md)；
+原始中文走读注释与新版对应关系见 [代码走读存档](docs/code-walkthrough.md)。
 
 ## 快速开始
 
@@ -236,7 +237,7 @@ internal/config/        环境变量配置
 internal/version/       版本号
 deploy/k8s/             Kubernetes 清单
 deploy/prometheus/      本地 Prometheus 配置与规则
-docs/                   架构与路线图
+docs/                   架构、路线图与代码走读存档
 migrations/             MySQL 迁移（P1 持久化）
 ```
 

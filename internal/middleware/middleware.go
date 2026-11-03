@@ -13,6 +13,8 @@ type contextKey string
 
 const requestIDKey contextKey = "request_id"
 
+// Chain 的顺序很重要：request id 必须最先注入，logging 才能记录到 ID；
+// recovery 放在最外层兜底 panic。
 func Chain(next http.Handler, logger *slog.Logger) http.Handler {
 	return recovery(requestIDs(logging(next, logger)), logger)
 }
@@ -54,11 +56,13 @@ func recovery(next http.Handler, logger *slog.Logger) http.Handler {
 	})
 }
 
+// RequestID 从 context 读取请求 ID。
 func RequestID(ctx context.Context) string {
 	value, _ := ctx.Value(requestIDKey).(string)
 	return value
 }
 
+// newRequestID 生成 req_ 加 12 字节随机数的十六进制。
 func newRequestID() string {
 	buf := make([]byte, 12)
 	if _, err := rand.Read(buf); err != nil {
@@ -67,6 +71,7 @@ func newRequestID() string {
 	return "req_" + hex.EncodeToString(buf)
 }
 
+// writeInternalError 输出统一的 500 JSON。
 func writeInternalError(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusInternalServerError)

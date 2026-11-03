@@ -3,6 +3,7 @@
 // The gateway is intentionally configuration-file free: every deployment
 // artifact (docker compose, Kubernetes ConfigMap, tests) can set the same
 // variables.
+// 所有配置都来自环境变量，Docker Compose、K8s ConfigMap 和测试共用同一套变量。
 package config
 
 import (
@@ -13,15 +14,18 @@ import (
 )
 
 // Upstream describes one routable model instance.
+// Upstream 描述一个可路由的模型实例。
 type Upstream struct {
-	ID          string
-	Model       string
-	Endpoint    string
-	Weight      int
+	ID       string
+	Model    string
+	Endpoint string
+	Weight   int
+	// MaxInflight 限制实例同时处理的请求数量。
 	MaxInflight int
 }
 
 // APIKeyConfig is one entry of MGW_API_KEYS.
+// APIKeyConfig 对应 MGW_API_KEYS 的一项。
 type APIKeyConfig struct {
 	Key         string
 	TenantID    string
@@ -32,6 +36,7 @@ type APIKeyConfig struct {
 }
 
 // Config is the fully resolved gateway configuration.
+// Config 是解析后的完整配置。
 type Config struct {
 	ListenAddr      string
 	APIKeys         []APIKeyConfig
@@ -49,21 +54,27 @@ type Config struct {
 }
 
 // Load resolves the configuration, applying demo friendly defaults.
+// Load 读取环境变量并填充默认值；非法值会回退到默认值。
 func Load() Config {
 	return Config{
-		ListenAddr:      env("MGW_LISTEN_ADDR", ":8080"),
-		APIKeys:         parseAPIKeys(),
-		RequestTimeout:  durationEnv("MGW_REQUEST_TIMEOUT", 120*time.Second),
+		ListenAddr: env("MGW_LISTEN_ADDR", ":8080"),
+		// 多租户 Key；为空时回退到旧版单 Key 变量。
+		APIKeys:        parseAPIKeys(),
+		RequestTimeout: durationEnv("MGW_REQUEST_TIMEOUT", 120*time.Second),
+		// 上游实例列表；格式 id|model|endpoint|weight|max_inflight。
 		Upstreams:       parseUpstreams(env("MGW_UPSTREAMS", "qwen-demo-01|qwen-demo|http://mock-model-1:8080|100|8;qwen-demo-02|qwen-demo|http://mock-model-2:8080|100|8")),
 		HealthInterval:  durationEnv("MGW_HEALTH_INTERVAL", 15*time.Second),
 		HealthPath:      env("MGW_HEALTH_PATH", "/healthz"),
 		HealthFailures:  intEnv("MGW_HEALTH_FAILURES", 2),
 		HealthSuccesses: intEnv("MGW_HEALTH_SUCCESSES", 2),
 		RetryAttempts:   intEnv("MGW_RETRY_ATTEMPTS", 2),
+		// 管理端点 Token；为空时 /admin/status 返回 404。
 		AdminToken:      env("MGW_ADMIN_TOKEN", ""),
 		ShutdownTimeout: durationEnv("MGW_SHUTDOWN_TIMEOUT", 10*time.Second),
-		MaxBodyBytes:    int64Env("MGW_MAX_BODY_BYTES", 10<<20),
-		LogLevel:        strings.ToLower(env("MGW_LOG_LEVEL", "info")),
+		// 请求体上限，默认 10 MiB。
+		MaxBodyBytes: int64Env("MGW_MAX_BODY_BYTES", 10<<20),
+		// 日志级别：debug/info/warn/error。
+		LogLevel: strings.ToLower(env("MGW_LOG_LEVEL", "info")),
 	}
 }
 
@@ -74,6 +85,9 @@ func Load() Config {
 // A single "*" in the model list grants access to every model. When
 // MGW_API_KEYS is empty the legacy single-key variables are used so existing
 // deployments keep working.
+//
+// parseAPIKeys 解析 token|tenant|models|rpm|daily_tokens|name；models 用逗号分隔，
+// "*" 表示全部；空 MGW_API_KEYS 时回退到旧变量。
 func parseAPIKeys() []APIKeyConfig {
 	raw := strings.TrimSpace(os.Getenv("MGW_API_KEYS"))
 	if raw == "" {
@@ -89,6 +103,7 @@ func parseAPIKeys() []APIKeyConfig {
 	}
 
 	var keys []APIKeyConfig
+	// 分号分隔多个 Key；字段不足或 token/tenant 为空的条目直接跳过。
 	for _, entry := range strings.Split(raw, ";") {
 		parts := strings.Split(entry, "|")
 		if len(parts) < 2 {
@@ -111,6 +126,7 @@ func parseAPIKeys() []APIKeyConfig {
 	return keys
 }
 
+// parseUpstreams 解析 id|model|endpoint|weight|max_inflight；非法条目跳过。
 func parseUpstreams(raw string) []Upstream {
 	var result []Upstream
 	for _, item := range strings.Split(raw, ";") {
@@ -128,6 +144,7 @@ func parseUpstreams(raw string) []Upstream {
 	return result
 }
 
+// field 返回 parts[index]，越界或空白时返回空串。
 func field(parts []string, index int) string {
 	if index >= len(parts) {
 		return ""
@@ -135,6 +152,7 @@ func field(parts []string, index int) string {
 	return strings.TrimSpace(parts[index])
 }
 
+// splitList 按逗号分割并去掉每项空白。
 func splitList(raw string) []string {
 	values := strings.Split(raw, ",")
 	result := make([]string, 0, len(values))
@@ -146,6 +164,7 @@ func splitList(raw string) []string {
 	return result
 }
 
+// env 读取非空环境变量，否则返回默认值。
 func env(key, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 		return value
@@ -153,10 +172,12 @@ func env(key, fallback string) string {
 	return fallback
 }
 
+// splitEnv 把环境变量按逗号分割成列表。
 func splitEnv(key, fallback string) []string {
 	return splitList(env(key, fallback))
 }
 
+// durationEnv 解析 Go duration；非法或非正数回退默认值。
 func durationEnv(key string, fallback time.Duration) time.Duration {
 	value := os.Getenv(key)
 	if parsed, err := time.ParseDuration(value); err == nil && parsed > 0 {
@@ -165,14 +186,17 @@ func durationEnv(key string, fallback time.Duration) time.Duration {
 	return fallback
 }
 
+// intEnv 读取整数环境变量，非法值回退默认值。
 func intEnv(key string, fallback int) int {
 	return atoiDefault(os.Getenv(key), fallback)
 }
 
+// int64Env 读取 int64 环境变量，非法值回退默认值。
 func int64Env(key string, fallback int64) int64 {
 	return int64Default(os.Getenv(key), fallback)
 }
 
+// atoiDefault 解析 int，失败时返回默认值。
 func atoiDefault(value string, fallback int) int {
 	parsed, err := strconv.Atoi(strings.TrimSpace(value))
 	if err != nil {
@@ -181,6 +205,7 @@ func atoiDefault(value string, fallback int) int {
 	return parsed
 }
 
+// int64Default 解析 int64，失败时返回默认值。
 func int64Default(value string, fallback int64) int64 {
 	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 	if err != nil {

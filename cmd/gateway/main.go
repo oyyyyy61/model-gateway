@@ -22,10 +22,14 @@ import (
 	"github.com/oyyyyy61/model-gateway/internal/version"
 )
 
+// main.go 是网关进程入口：读取配置，构建鉴权、路由、指标、健康检查、代理和
+// HTTP handler，启动服务并在收到 SIGINT/SIGTERM 后优雅关闭。
 func main() {
+	// 配置读取：环境变量 → config.Config；默认值和解析规则在 internal/config/config.go。
 	cfg := config.Load()
 	logger := newLogger(cfg.LogLevel)
 
+	// API key 鉴权：每个配置项转成 auth.Key，只保存 SHA-256 哈希和策略。
 	keys := make([]auth.Key, 0, len(cfg.APIKeys))
 	for _, item := range cfg.APIKeys {
 		key := auth.NewKey(item.Key, item.TenantID, item.Name, item.Models, item.RPM, item.DailyTokens)
@@ -38,11 +42,13 @@ func main() {
 			"daily_tokens", key.DailyTokens,
 		)
 	}
+	// 创建鉴权服务；内部按 Key 哈希索引，空 token/租户会被过滤。
 	authService := auth.NewService(keys)
 	if authService.Len() == 0 {
 		logger.Warn("no usable api key configured; every model request will be rejected")
 	}
 
+	// 创建模型实例列表：id|model|endpoint|weight|max_inflight。
 	instances := make([]routing.Instance, 0, len(cfg.Upstreams))
 	for _, upstream := range cfg.Upstreams {
 		instances = append(instances, routing.Instance{
@@ -53,14 +59,17 @@ func main() {
 			MaxInflight: upstream.MaxInflight,
 		})
 	}
+	// 模型实例选择/负载均衡：平滑加权轮询 + 每实例并发信号量。
 	picker := routing.NewPicker(instances)
 
+	// 指标注册表；先把每个实例的初始健康状态写入 gauge。
 	registry := metrics.New()
 	registry.BuildInfo.Set(1, map[string]string{"version": version.Version})
 	for _, snapshot := range picker.Snapshot() {
 		registry.UpstreamHealthy.Set(boolFloat(snapshot.Healthy), map[string]string{"instance": snapshot.ID, "model": snapshot.Model})
 	}
 
+	// 健康探测器：后台周期探测，连续失败下线、连续成功恢复。
 	checker := health.New(health.Config{
 		Picker:    picker,
 		Client:    &http.Client{Timeout: 5 * time.Second},
@@ -80,6 +89,7 @@ func main() {
 		checker.Run(checkerContext)
 	}()
 
+	// 代理：请求体限制、实例选择、故障转移、SSE 透传和 usage 解析。
 	proxy := gateway.NewProxy(gateway.ProxyConfig{
 		Picker:         picker,
 		Client:         upstreamClient(),
@@ -89,6 +99,7 @@ func main() {
 		MaxBodyBytes:   cfg.MaxBodyBytes,
 		Metrics:        registry,
 	})
+	// HTTP handler：路由、认证、模型授权、限流/配额、指标和审计。
 	handler := gateway.NewHandler(gateway.HandlerConfig{
 		Proxy:      proxy,
 		Auth:       authService,
@@ -99,8 +110,10 @@ func main() {
 		Version:    version.Version,
 		Logger:     logger,
 	})
+	// 中间件顺序：request id → 访问日志 → panic recovery（recovery 在最外层）。
 	root := middleware.Chain(handler, logger)
 
+	// HTTP 服务器：只设置读头超时和空闲超时；单请求超时由 Proxy 控制。
 	server := &http.Server{
 		Addr:              cfg.ListenAddr,
 		Handler:           root,
@@ -108,6 +121,7 @@ func main() {
 		IdleTimeout:       90 * time.Second,
 	}
 
+	// 启动 HTTP 服务器；ListenAndServe 阻塞运行，ErrServerClosed 是 Shutdown 的正常返回。
 	go func() {
 		logger.Info("gateway started",
 			"addr", cfg.ListenAddr,
@@ -123,6 +137,7 @@ func main() {
 		}
 	}()
 
+	// 监听中断信号。
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
@@ -134,13 +149,16 @@ func main() {
 		logger.Warn("health checker did not stop in time")
 	}
 
+	// 优雅关闭：先停健康探测器，再等待在途请求；Shutdown 的 ctx 是“最多等多久”的计时器。
 	shutdownContext, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	// cancel 在 Shutdown 完成后调用，释放计时器资源。
 	defer cancel()
 	if err := server.Shutdown(shutdownContext); err != nil {
 		logger.Error("gateway shutdown failed", "error", err)
 	}
 }
 
+// upstreamClient 构建带连接池和超时的上游 HTTP 客户端；请求级超时由 Proxy 控制。
 func upstreamClient() *http.Client {
 	transport := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
@@ -155,6 +173,7 @@ func upstreamClient() *http.Client {
 	return &http.Client{Transport: transport}
 }
 
+// newLogger 输出 JSON 日志到 stdout，级别来自 MGW_LOG_LEVEL。
 func newLogger(level string) *slog.Logger {
 	var parsed slog.Level
 	switch strings.ToLower(level) {
@@ -170,6 +189,7 @@ func newLogger(level string) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: parsed}))
 }
 
+// boolFloat 把布尔值转成 Prometheus gauge 的 0/1。
 func boolFloat(value bool) float64 {
 	if value {
 		return 1
