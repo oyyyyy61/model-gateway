@@ -17,6 +17,7 @@ func Chain(next http.Handler, logger *slog.Logger) http.Handler {
 	return recovery(logging(requestIDs(next), logger), logger)
 }
 
+// 获取请求ID，如果请求头中没有X-Request-ID，则生成一个新的请求ID
 func requestIDs(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get("X-Request-ID")
@@ -29,6 +30,7 @@ func requestIDs(next http.Handler) http.Handler {
 	})
 }
 
+// 输出请求日志，包括请求ID、方法、路径和处理时间
 func logging(next http.Handler, logger *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
@@ -37,6 +39,7 @@ func logging(next http.Handler, logger *slog.Logger) http.Handler {
 	})
 }
 
+// 捕获panic，输出错误日志，并返回500错误
 func recovery(next http.Handler, logger *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {

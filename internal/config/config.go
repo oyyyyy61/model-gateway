@@ -12,6 +12,7 @@ type Upstream struct {
 	Model       string
 	Endpoint    string
 	Weight      int
+	// 限制实例同时处理的请求数量
 	MaxInflight int
 }
 
@@ -24,6 +25,7 @@ type Config struct {
 	Upstreams      []Upstream
 }
 
+// 加载配置，从环境变量中读取，若未设置则使用默认值
 func Load() Config {
 	models := splitEnv("MGW_ALLOWED_MODELS", "qwen-demo")
 	return Config{
@@ -53,6 +55,7 @@ func parseUpstreams(raw string) []Upstream {
 	return result
 }
 
+// 环境变量读取函数，若未设置则使用默认值
 func env(key, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 		return value

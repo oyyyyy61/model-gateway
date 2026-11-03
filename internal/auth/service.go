@@ -1,3 +1,5 @@
+// apikey认证、模型访问的授权服务
+
 package auth
 
 import (
@@ -17,6 +19,7 @@ type Service struct {
 	allowedModels map[string]struct{}
 }
 
+// NewService 创建一个新的Service实例，传入API密钥、租户ID和允许的模型列表
 func NewService(apiKey, tenantID string, allowedModels []string) *Service {
 	allowed := make(map[string]struct{}, len(allowedModels))
 	for _, model := range allowedModels {
@@ -26,10 +29,12 @@ func NewService(apiKey, tenantID string, allowedModels []string) *Service {
 }
 
 func (s *Service) Authenticate(value string) (Principal, bool) {
+	// TrimSpace去除value前后空格，并检查是否以"Bearer "开头，如果是，则去掉前缀
 	value = strings.TrimSpace(value)
 	if strings.HasPrefix(strings.ToLower(value), "bearer ") {
 		value = strings.TrimSpace(value[len("bearer "):])
 	}
+	// 检查value是否为空，或者经过HashKey处理后的值是否与存储的keyHash不匹配，如果是，则返回空的Principal和false，表示认证失败
 	if value == "" || HashKey(value) != s.keyHash {
 		return Principal{}, false
 	}
