@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: model-gateway-config
+  namespace: model-gateway
+  labels:
+    app.kubernetes.io/name: model-gateway
+data:
+  MGW_LISTEN_ADDR: ":8080"
+  # 每项：id|model|endpoint|weight|max_inflight
+  # endpoint 必须是 OpenAI 兼容 API 的根地址，网关统一转发 /v1/chat/completions。
+  MGW_UPSTREAMS: "qwen-72b-01|qwen-72b|http://vllm-qwen-72b-0.vllm.svc.cluster.local:8000|100|8;qwen-72b-02|qwen-72b|http://vllm-qwen-72b-1.vllm.svc.cluster.local:8000|100|8"
+  MGW_REQUEST_TIMEOUT: "120s"
+  MGW_HEALTH_INTERVAL: "15s"
+  MGW_HEALTH_PATH: "/health"
+  MGW_HEALTH_FAILURES: "2"
+  MGW_HEALTH_SUCCESSES: "2"
+  MGW_RETRY_ATTEMPTS: "2"
+  MGW_MAX_BODY_BYTES: "10485760"
+  MGW_LOG_LEVEL: "info"

@@ -1,0 +1,93 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: model-gateway
+  namespace: model-gateway
+  labels:
+    app.kubernetes.io/name: model-gateway
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: model-gateway
+      rules:
+        - alert: ModelGatewayDown
+          expr: up{job=~".*model-gateway.*"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            category: model-gateway
+          annotations:
+            summary: "Model Gateway 不可达"
+            description: "Prometheus 连续 2 分钟无法抓取 {{ $labels.instance }} 的 /metrics。"
+
+        - alert: ModelGatewayHighErrorRate
+          expr: |
+            sum(rate(gateway_requests_total{status=~"upstream_5xx|upstream_error|upstream_timeout|upstream_unavailable"}[5m]))
+            /
+            clamp_min(sum(rate(gateway_requests_total[5m])), 0.001) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+            category: model-gateway
+          annotations:
+            summary: "Model Gateway 上游错误率超过 5%"
+            description: "最近 5 分钟错误请求占比为 {{ $value | humanizePercentage }}，检查上游实例与网络。"
+
+        - alert: ModelGatewayLatencyHigh
+          expr: histogram_quantile(0.95, sum by (le) (rate(gateway_request_duration_seconds_bucket[5m]))) > 30
+          for: 10m
+          labels:
+            severity: warning
+            category: model-gateway
+          annotations:
+            summary: "Model Gateway P95 延迟超过 30 秒"
+            description: "当前 P95 延迟为 {{ $value | humanizeDuration }}，检查模型排队、GPU 利用率和超时配置。"
+
+        - alert: ModelGatewayNoHealthyUpstreams
+          expr: sum(gateway_upstream_healthy) == 0
+          for: 1m
+          labels:
+            severity: critical
+            category: model-gateway
+          annotations:
+            summary: "Model Gateway 没有健康的上游实例"
+            description: "所有模型实例均被健康检查判定为不可用，网关将返回 503。"
+
+        - alert: ModelGatewayUpstreamUnhealthy
+          expr: min by (instance, model) (gateway_upstream_healthy) == 0
+          for: 2m
+          labels:
+            severity: warning
+            category: model-gateway
+          annotations:
+            summary: "模型实例 {{ $labels.instance }} 不健康"
+            description: "实例 {{ $labels.instance }}（模型 {{ $labels.model }}）连续 2 分钟健康探测失败。"
+
+        - alert: ModelGatewayRateLimitSpike
+          expr: sum(rate(gateway_rate_limited_total[5m])) > 5
+          for: 10m
+          labels:
+            severity: warning
+            category: model-gateway
+          annotations:
+            summary: "Model Gateway 限流持续升高"
+            description: "最近 5 分钟平均每秒有 {{ $value }} 个请求被限流，检查租户配额或异常调用。"
+
+        - alert: ModelGatewayDailyQuotaExhausted
+          expr: increase(gateway_rate_limited_total{reason="daily_tokens"}[1h]) > 0
+          labels:
+            severity: info
+            category: model-gateway
+          annotations:
+            summary: "有租户触发每日 token 配额"
+            description: "过去 1 小时出现每日 token 配额拒绝，按租户核对用量或调整配额。"
+
+        - alert: ModelGatewayHealthProbeFailing
+          expr: sum by (instance) (rate(gateway_health_checks_total{result="failure"}[5m])) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+            category: model-gateway
+          annotations:
+            summary: "模型实例 {{ $labels.instance }} 健康探测持续失败"
+            description: "实例 {{ $labels.instance }} 的健康探测失败速率持续偏高，检查模型进程与端口。"

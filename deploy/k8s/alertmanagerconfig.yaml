@@ -1,0 +1,28 @@
+# 可选：把 model-gateway 告警接到 alertment 仓库的飞书适配器。
+# 需要先在 gpu-observability 命名空间部署 alertmanager-feishu-adapter。
+# kube-prometheus-stack 需要允许发现该命名空间的 AlertmanagerConfig，
+# 并把 alertmanagerConfigMatcherStrategy 设为 None（见 alertment README）。
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: model-gateway-feishu
+  namespace: model-gateway
+  labels:
+    app.kubernetes.io/name: model-gateway
+spec:
+  route:
+    receiver: feishu-adapter
+    groupBy: ["alertname", "instance"]
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+    matchers:
+      - name: category
+        value: model-gateway
+        matchType: "="
+  receivers:
+    - name: feishu-adapter
+      webhookConfigs:
+        - url: http://alertmanager-feishu-adapter.gpu-observability.svc.cluster.local:8080/alerts
+          sendResolved: true
+          maxAlerts: 0

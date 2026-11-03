@@ -3,10 +3,14 @@ services:
     build: .
     environment:
       MGW_LISTEN_ADDR: ":8080"
-      MGW_API_KEY: "mgw_live_demo"
-      MGW_TENANT_ID: "tenant-demo"
-      MGW_ALLOWED_MODELS: "qwen-demo"
+      MGW_API_KEYS: "mgw_live_demo|tenant-demo|qwen-demo|120|1000000|demo;mgw_live_reader|tenant-reader|qwen-demo|30|100000|reader"
       MGW_UPSTREAMS: "qwen-demo-01|qwen-demo|http://mock-model-1:8080|100|8;qwen-demo-02|qwen-demo|http://mock-model-2:8080|100|8"
+      MGW_REQUEST_TIMEOUT: "120s"
+      MGW_HEALTH_INTERVAL: "5s"
+      MGW_HEALTH_PATH: "/healthz"
+      MGW_RETRY_ATTEMPTS: "2"
+      MGW_ADMIN_TOKEN: "admin-demo"
+      MGW_LOG_LEVEL: "info"
     ports:
       - "8080:8080"
     depends_on:
@@ -55,5 +59,6 @@ services:
     profiles: [infra]
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/rules.yml:/etc/prometheus/rules.yml:ro
     ports:
       - "9090:9090"
