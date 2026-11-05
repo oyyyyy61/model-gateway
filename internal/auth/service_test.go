@@ -10,7 +10,7 @@ func TestServiceAuthenticateAndAuthorize(t *testing.T) {
 		NewKey("mgw_live_wild", "tenant-2", "wildcard", []string{"*"}, 0, 0),
 	})
 
-	// principal 表示认证后的主体信息，ok 表示认证是否成功。
+	// 返回的主体信息应包含租户和 Key，认证状态应为成功。
 	principal, key, ok := service.Authenticate("Bearer mgw_live_secret")
 	// 验证认证结果：租户、Key ID 和策略都应正确返回。
 	if !ok || principal.TenantID != "tenant-1" || principal.KeyID != "primary" {

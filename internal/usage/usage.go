@@ -1,10 +1,8 @@
-// Package usage extracts OpenAI compatible token usage from upstream
-// responses.
+// usage 包从上游响应中提取 OpenAI 兼容的 token 用量。
 //
-// Non streaming responses carry a single usage object. Streaming responses only
-// carry it in the final SSE chunk and only when the caller asked for
-// include_usage, so the stream is fed through StreamTracker which keeps a
-// bounded line buffer and remembers the last usage object it saw.
+// 非流式响应带一个 usage 对象。流式响应只在最后一个 SSE chunk 中携带，
+// 且需要调用方请求 include_usage，因此流式数据交给 StreamTracker：
+// 它维护有上限的行缓冲，并记住最后一次看到的 usage 对象。
 package usage
 
 import (
@@ -13,14 +11,14 @@ import (
 	"sync"
 )
 
-// Usage mirrors the OpenAI usage object.
+// Usage 对应 OpenAI 的 usage 对象。
 type Usage struct {
 	PromptTokens     int64 `json:"prompt_tokens"`
 	CompletionTokens int64 `json:"completion_tokens"`
 	TotalTokens      int64 `json:"total_tokens"`
 }
 
-// Empty reports whether the upstream did not report any token usage.
+// Empty 表示上游没有报告任何 token 用量。
 func (u Usage) Empty() bool {
 	return u.PromptTokens == 0 && u.CompletionTokens == 0 && u.TotalTokens == 0
 }
@@ -29,7 +27,7 @@ type payload struct {
 	Usage *Usage `json:"usage"`
 }
 
-// Parse extracts usage from a JSON response body.
+// Parse 从 JSON 响应体中提取 usage。
 func Parse(body []byte) (Usage, bool) {
 	var decoded payload
 	if err := json.Unmarshal(body, &decoded); err != nil || decoded.Usage == nil {
@@ -38,7 +36,7 @@ func Parse(body []byte) (Usage, bool) {
 	return *decoded.Usage, true
 }
 
-// StreamTracker incrementally scans an SSE stream for usage objects.
+// StreamTracker 增量扫描 SSE 流中的 usage 对象。
 type StreamTracker struct {
 	mu    sync.Mutex
 	buf   []byte
@@ -48,8 +46,7 @@ type StreamTracker struct {
 
 const maxLineBytes = 1 << 20
 
-// Write implements io.Writer so it can be placed in front of the client
-// response writer.
+// Write 实现 io.Writer，可以放在客户端 ResponseWriter 前面。
 func (t *StreamTracker) Write(p []byte) (int, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -65,21 +62,21 @@ func (t *StreamTracker) Write(p []byte) (int, error) {
 		t.consume(line)
 	}
 
-	// A malformed upstream must not grow memory without bound.
+	// 上游格式异常时不能无限增长内存。
 	if len(t.buf) > maxLineBytes {
 		t.buf = t.buf[:0]
 	}
 	return len(p), nil
 }
 
-// Usage returns the last usage object observed in the stream.
+// Usage 返回流中最后一次观察到的 usage 对象。
 func (t *StreamTracker) Usage() (Usage, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.usage, t.found
 }
 
-// Reset clears buffered partial lines while preserving parsed usage.
+// Reset 清空未完成的行缓冲，但保留已解析的 usage。
 func (t *StreamTracker) Reset() {
 	t.mu.Lock()
 	defer t.mu.Unlock()

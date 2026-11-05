@@ -1,5 +1,4 @@
-// Package gateway contains the HTTP surface of the gateway: routing, auth,
-// admission control, proxying and audit logging.
+// gateway 包提供网关的 HTTP 层：路由、认证、准入控制、代理和审计日志。
 package gateway
 
 import (
@@ -19,18 +18,15 @@ import (
 	"github.com/oyyyyy61/model-gateway/internal/usage"
 )
 
-// ErrUpstreamUnavailable means no healthy instance could accept the request.
 // ErrUpstreamUnavailable 表示没有健康实例可用。
 var ErrUpstreamUnavailable = errors.New("upstream unavailable")
 
-// ErrRequestTooLarge means the request body exceeded the configured limit.
 // ErrRequestTooLarge 表示请求体超过 MGW_MAX_BODY_BYTES。
 var ErrRequestTooLarge = errors.New("request body too large")
 
 // proxy.go 是网关的转发核心：限制请求体、解析 stream、按模型选实例，
 // 在响应开始前做故障转移，并把上游 JSON/SSE 响应原样转发给客户端。
 
-// ProxyConfig wires a Proxy.
 // ProxyConfig 装配 Proxy；MaxAttempts 默认 1，MaxBodyBytes 默认 10 MiB。
 type ProxyConfig struct {
 	Picker         *routing.Picker
@@ -42,7 +38,6 @@ type ProxyConfig struct {
 	Metrics        *metrics.Metrics
 }
 
-// Proxy forwards OpenAI compatible requests to model instances.
 // Proxy 负责实例选择、上游请求、重试和响应转发。
 type Proxy struct {
 	picker         *routing.Picker
@@ -54,7 +49,6 @@ type Proxy struct {
 	metrics        *metrics.Metrics
 }
 
-// Result describes what the proxy did with a request.
 // Result 记录一次代理调用的结果，供 handler 记录指标和审计。
 type Result struct {
 	StatusCode      int
@@ -68,7 +62,6 @@ type Result struct {
 	Usage           usage.Usage
 }
 
-// NewProxy applies safe defaults for optional configuration.
 // NewProxy 为 Client、MaxAttempts、MaxBodyBytes 填默认值。
 func NewProxy(cfg ProxyConfig) *Proxy {
 	proxy := &Proxy{
@@ -92,8 +85,7 @@ func NewProxy(cfg ProxyConfig) *Proxy {
 	return proxy
 }
 
-// ServeHTTP buffers the body, then tries instances until one produces a
-// response that should be forwarded.
+// ServeHTTP 先缓冲请求体，再逐个尝试实例，直到某个实例产生可转发的响应。
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request, model string) (Result, error) {
 	started := time.Now()
 	// 读取请求体并限制大小；body 在重试之间复用。
@@ -153,10 +145,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request, model string) 
 func (p *Proxy) attempt(ctx context.Context, w http.ResponseWriter, r *http.Request, model string, instance routing.Instance, body []byte, stream bool, started time.Time, allowRetry bool) (Result, bool, error) {
 	// 显式路由 /v1/models/{model}/chat/completions 改写为上游标准路径，
 	// 并在请求体缺少 model 时注入 URL 中的模型。
-	// The explicit /v1/models/{model}/chat/completions route is translated to
-	// the canonical OpenAI path so vLLM and GPUStack instances can serve it.
-	// The model is injected into the body when the caller used the explicit
-	// route without setting it.
 	requestBody := body
 	upstreamPath := r.URL.Path
 	if strings.HasPrefix(upstreamPath, "/v1/models/") {
@@ -294,8 +282,6 @@ func requestIsStream(body []byte) bool {
 	return json.Unmarshal(body, &payload) == nil && payload.Stream
 }
 
-// ensureModel adds the model field when the caller selected it in the URL and
-// left it out of the JSON body.
 // ensureModel 在显式路由且 body 没有 model 时注入 URL 中的模型。
 func ensureModel(body []byte, model string) []byte {
 	var payload map[string]json.RawMessage
@@ -317,7 +303,6 @@ func ensureModel(body []byte, model string) []byte {
 	return updated
 }
 
-// MaxBodyBytes exposes the configured request body limit to the handler.
 // MaxBodyBytes 暴露请求体上限，供 handler 提前做限制。
 func (p *Proxy) MaxBodyBytes() int64 {
 	return p.maxBodyBytes
@@ -357,7 +342,6 @@ func isRetryableStatus(status int) bool {
 	}
 }
 
-// classifyStatus buckets an upstream status for logs and metrics.
 // classifyStatus 把上游状态码归类为 success/upstream_4xx/upstream_5xx。
 func classifyStatus(status int) string {
 	switch {

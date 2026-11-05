@@ -1,10 +1,9 @@
-// Package limits implements the gateway's local admission control: a token
-// bucket for requests-per-minute and a daily token budget per API key.
+// limits 包实现网关的本地准入控制：按 API Key 的每分钟令牌桶，
+// 以及每日 token 预算。
 //
-// State is process local. That is enough for a single replica and keeps the
-// gateway dependency free; a Redis backed implementation can replace Limiter
-// behind the same methods once the gateway runs with multiple replicas. The
-// MySQL audit table already records the same usage fields.
+// 状态保存在进程内，单副本足够，也让网关保持零外部依赖；多副本部署时，
+// 可以用 Redis 实现替换 Limiter，方法签名不变。MySQL 审计表已经记录
+// 相同的用量字段。
 package limits
 
 import (
@@ -12,7 +11,7 @@ import (
 	"time"
 )
 
-// Limiter tracks per-key request buckets and daily token usage.
+// Limiter 记录每个 Key 的请求令牌桶和每日 token 用量。
 type Limiter struct {
 	mu      sync.Mutex
 	now     func() time.Time
@@ -30,7 +29,7 @@ type tokenCounter struct {
 	tokens int64
 }
 
-// New returns an empty limiter using the wall clock.
+// New 使用系统时钟创建一个空的 Limiter。
 func New() *Limiter {
 	return &Limiter{
 		now:     time.Now,
@@ -39,17 +38,17 @@ func New() *Limiter {
 	}
 }
 
-// SetClock replaces the clock. It is only useful for deterministic tests.
+// SetClock 替换时钟，仅用于需要确定性的测试。
 func (l *Limiter) SetClock(now func() time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.now = now
 }
 
-// AllowRequest consumes one token from the key's per-minute bucket.
+// AllowRequest 从 Key 的每分钟令牌桶中消费一个令牌。
 //
-// rpm <= 0 disables request limiting. The returned duration is the wait until
-// one token becomes available and is meant for the Retry-After header.
+// rpm <= 0 表示不限制请求。返回的时长是等到下一个令牌可用的时间，
+// 用于 Retry-After 响应头。
 func (l *Limiter) AllowRequest(key string, rpm int) (bool, time.Duration) {
 	if rpm <= 0 {
 		return true, 0
@@ -83,7 +82,7 @@ func (l *Limiter) AllowRequest(key string, rpm int) (bool, time.Duration) {
 	return false, wait
 }
 
-// AddTokens records usage against the key's current UTC day.
+// AddTokens 按 Key 当前 UTC 日期累计 token 用量。
 func (l *Limiter) AddTokens(key string, tokens int64) {
 	if tokens <= 0 {
 		return
@@ -99,7 +98,7 @@ func (l *Limiter) AddTokens(key string, tokens int64) {
 	counter.tokens += tokens
 }
 
-// TokensUsed returns the token usage recorded for the current UTC day.
+// TokensUsed 返回 Key 在当前 UTC 日期已记录的 token 用量。
 func (l *Limiter) TokensUsed(key string) int64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -111,8 +110,8 @@ func (l *Limiter) TokensUsed(key string) int64 {
 	return counter.tokens
 }
 
-// QuotaExceeded reports whether the key already reached its daily token
-// budget. daily <= 0 disables the quota.
+// QuotaExceeded 判断 Key 是否已达到每日 token 预算。
+// daily <= 0 表示不限制配额。
 func (l *Limiter) QuotaExceeded(key string, daily int64) (bool, int64) {
 	used := l.TokensUsed(key)
 	if daily <= 0 {

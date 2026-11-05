@@ -1,9 +1,7 @@
-// Package metrics exposes the gateway's Prometheus metric families without
-// pulling in an external client library.
+// metrics 包暴露网关的 Prometheus 指标族，不引入外部客户端库。
 //
-// The set of families is fixed, which keeps cardinality bounded and makes the
-// exposition deterministic and cheap to test. All vectors are safe for
-// concurrent use.
+// 指标族是固定的，因此基数可控，文本输出稳定且便于测试。
+// 所有向量都支持并发使用。
 package metrics
 
 import (
@@ -13,7 +11,7 @@ import (
 	"sync"
 )
 
-// Metrics groups every family the gateway exposes.
+// Metrics 汇总网关暴露的所有指标族。
 type Metrics struct {
 	Requests         *CounterVec
 	Duration         *HistogramVec
@@ -26,7 +24,7 @@ type Metrics struct {
 	BuildInfo        *GaugeVec
 }
 
-// New builds the full metric set.
+// New 构建完整的指标集合。
 func New() *Metrics {
 	return &Metrics{
 		Requests:         NewCounterVec("gateway_requests_total", "Total gateway requests by model, tenant and outcome.", "model", "tenant", "status"),
@@ -43,7 +41,7 @@ func New() *Metrics {
 
 var defaultBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120}
 
-// Render returns the Prometheus text exposition.
+// Render 返回 Prometheus 文本格式的指标。
 func (m *Metrics) Render() string {
 	var builder strings.Builder
 	families := []interface{ render(*strings.Builder) }{
@@ -63,7 +61,7 @@ func (m *Metrics) Render() string {
 	return builder.String()
 }
 
-// CounterVec is a monotonically increasing family.
+// CounterVec 是单调递增的计数器族。
 type CounterVec struct {
 	name   string
 	help   string
@@ -77,15 +75,15 @@ type counterSample struct {
 	value  float64
 }
 
-// NewCounterVec builds an empty counter family.
+// NewCounterVec 创建一个空的计数器族。
 func NewCounterVec(name, help string, labels ...string) *CounterVec {
 	return &CounterVec{name: name, help: help, labels: labels, values: make(map[string]*counterSample)}
 }
 
-// Inc adds one to the matching sample.
+// Inc 给匹配的样本加一。
 func (c *CounterVec) Inc(labels map[string]string) { c.Add(1, labels) }
 
-// Add adds delta to the matching sample.
+// Add 给匹配的样本增加增量。
 func (c *CounterVec) Add(delta float64, labels map[string]string) {
 	key, values := labelKey(c.labels, labels)
 	c.mu.Lock()
@@ -108,7 +106,7 @@ func (c *CounterVec) render(builder *strings.Builder) {
 	}
 }
 
-// GaugeVec is a family whose samples can move up and down.
+// GaugeVec 是样本值可升可降的指标族。
 type GaugeVec struct {
 	name   string
 	help   string
@@ -122,12 +120,12 @@ type gaugeSample struct {
 	value  float64
 }
 
-// NewGaugeVec builds an empty gauge family.
+// NewGaugeVec 创建一个空的 Gauge 指标族。
 func NewGaugeVec(name, help string, labels ...string) *GaugeVec {
 	return &GaugeVec{name: name, help: help, labels: labels, values: make(map[string]*gaugeSample)}
 }
 
-// Set replaces the matching sample.
+// Set 替换匹配样本的值。
 func (g *GaugeVec) Set(value float64, labels map[string]string) {
 	key, values := labelKey(g.labels, labels)
 	g.mu.Lock()
@@ -140,7 +138,7 @@ func (g *GaugeVec) Set(value float64, labels map[string]string) {
 	sample.value = value
 }
 
-// Add changes the matching sample by delta.
+// Add 给匹配样本增加增量。
 func (g *GaugeVec) Add(delta float64, labels map[string]string) {
 	key, values := labelKey(g.labels, labels)
 	g.mu.Lock()
@@ -163,7 +161,7 @@ func (g *GaugeVec) render(builder *strings.Builder) {
 	}
 }
 
-// HistogramVec observes values into fixed buckets.
+// HistogramVec 把观测值记录到固定分桶中。
 type HistogramVec struct {
 	name    string
 	help    string
@@ -180,14 +178,14 @@ type histogramSample struct {
 	count  uint64
 }
 
-// NewHistogramVec builds a histogram family with sorted bucket bounds.
+// NewHistogramVec 创建一个直方图族，分桶边界会先排序。
 func NewHistogramVec(name, help string, buckets []float64, labels ...string) *HistogramVec {
 	bounds := append([]float64(nil), buckets...)
 	sort.Float64s(bounds)
 	return &HistogramVec{name: name, help: help, labels: labels, buckets: bounds, values: make(map[string]*histogramSample)}
 }
 
-// Observe records one value.
+// Observe 记录一个观测值。
 func (h *HistogramVec) Observe(value float64, labels map[string]string) {
 	key, values := labelKey(h.labels, labels)
 	h.mu.Lock()

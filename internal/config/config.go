@@ -1,9 +1,7 @@
-// Package config loads the gateway configuration from environment variables.
+// config 包从环境变量加载网关配置。
 //
-// The gateway is intentionally configuration-file free: every deployment
-// artifact (docker compose, Kubernetes ConfigMap, tests) can set the same
-// variables.
-// 所有配置都来自环境变量，Docker Compose、K8s ConfigMap 和测试共用同一套变量。
+// 网关不依赖配置文件：Docker Compose、K8s ConfigMap 和测试都可以设置
+// 同一套环境变量。
 package config
 
 import (
@@ -13,7 +11,6 @@ import (
 	"time"
 )
 
-// Upstream describes one routable model instance.
 // Upstream 描述一个可路由的模型实例。
 type Upstream struct {
 	ID       string
@@ -24,7 +21,6 @@ type Upstream struct {
 	MaxInflight int
 }
 
-// APIKeyConfig is one entry of MGW_API_KEYS.
 // APIKeyConfig 对应 MGW_API_KEYS 的一项。
 type APIKeyConfig struct {
 	Key         string
@@ -35,7 +31,6 @@ type APIKeyConfig struct {
 	DailyTokens int64
 }
 
-// Config is the fully resolved gateway configuration.
 // Config 是解析后的完整配置。
 type Config struct {
 	ListenAddr      string
@@ -53,7 +48,6 @@ type Config struct {
 	LogLevel        string
 }
 
-// Load resolves the configuration, applying demo friendly defaults.
 // Load 读取环境变量并填充默认值；非法值会回退到默认值。
 func Load() Config {
 	return Config{
@@ -78,16 +72,12 @@ func Load() Config {
 	}
 }
 
-// parseAPIKeys reads MGW_API_KEYS:
+// parseAPIKeys 解析 MGW_API_KEYS：
 //
 //	token|tenant|model1,model2|rpm|daily_tokens|name
 //
-// A single "*" in the model list grants access to every model. When
-// MGW_API_KEYS is empty the legacy single-key variables are used so existing
-// deployments keep working.
-//
-// parseAPIKeys 解析 token|tenant|models|rpm|daily_tokens|name；models 用逗号分隔，
-// "*" 表示全部；空 MGW_API_KEYS 时回退到旧变量。
+// 模型列表里的 "*" 表示允许所有模型；MGW_API_KEYS 为空时回退到旧版
+// 单 Key 变量，保证已有部署继续工作。
 func parseAPIKeys() []APIKeyConfig {
 	raw := strings.TrimSpace(os.Getenv("MGW_API_KEYS"))
 	if raw == "" {

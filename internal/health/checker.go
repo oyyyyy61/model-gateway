@@ -1,9 +1,7 @@
-// Package health runs the background upstream probes that keep the routing
-// table honest.
+// health 包运行后台上游探测，保证路由表中的健康状态准确。
 //
-// A transport error marks an instance unhealthy immediately (fail fast), while
-// recovery only happens after a configurable number of consecutive successful
-// probes so a flapping upstream cannot rejoin the pool after one lucky request.
+// 连接错误会立即把实例标记为不健康（快速失败）；恢复则要连续成功
+// 达到配置次数，避免抖动的上游靠一次侥幸请求重新加入。
 package health
 
 import (
@@ -20,7 +18,7 @@ import (
 	"github.com/oyyyyy61/model-gateway/internal/routing"
 )
 
-// Status is the admin friendly view of one upstream instance.
+// Status 是面向管理端的上游实例视图。
 type Status struct {
 	ID          string    `json:"id"`
 	Model       string    `json:"model"`
@@ -33,7 +31,7 @@ type Status struct {
 	Failures    int       `json:"consecutive_failures"`
 }
 
-// Config wires a Checker.
+// Config 装配 Checker。
 type Config struct {
 	Picker    *routing.Picker
 	Client    *http.Client
@@ -45,7 +43,7 @@ type Config struct {
 	Metrics   *metrics.Metrics
 }
 
-// Checker probes upstream health endpoints on a fixed interval.
+// Checker 按固定间隔探测上游健康端点。
 type Checker struct {
 	picker    *routing.Picker
 	client    *http.Client
@@ -68,7 +66,7 @@ type probeState struct {
 	lastStatus  int
 }
 
-// New builds a checker. Missing optional fields fall back to safe defaults.
+// New 创建 Checker；可选字段为空时使用安全默认值。
 func New(cfg Config) *Checker {
 	checker := &Checker{
 		picker:    cfg.Picker,
@@ -99,7 +97,7 @@ func New(cfg Config) *Checker {
 	return checker
 }
 
-// Run probes immediately and then on every interval until ctx is done.
+// Run 先立即探测一次，之后按间隔探测，直到 ctx 结束。
 func (c *Checker) Run(ctx context.Context) {
 	if c.interval <= 0 {
 		return
@@ -117,7 +115,7 @@ func (c *Checker) Run(ctx context.Context) {
 	}
 }
 
-// CheckOnce probes every configured instance concurrently.
+// CheckOnce 并发探测所有已配置实例。
 func (c *Checker) CheckOnce(ctx context.Context) {
 	snapshots := c.picker.Snapshot()
 	limit := make(chan struct{}, 8)
@@ -134,7 +132,7 @@ func (c *Checker) CheckOnce(ctx context.Context) {
 	wait.Wait()
 }
 
-// Status returns the current upstream view sorted by instance id.
+// Status 返回按实例 ID 排序的当前视图。
 func (c *Checker) Status() []Status {
 	snapshots := c.picker.Snapshot()
 	c.mu.Lock()
@@ -160,7 +158,7 @@ func (c *Checker) Status() []Status {
 	return result
 }
 
-// HealthyCount reports how many healthy instances exist across all models.
+// HealthyCount 返回所有模型的健康实例总数。
 func (c *Checker) HealthyCount() int {
 	return c.picker.HealthyCount()
 }

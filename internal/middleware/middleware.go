@@ -13,8 +13,8 @@ type contextKey string
 
 const requestIDKey contextKey = "request_id"
 
-// Chain 的顺序很重要：request id 必须最先注入，logging 才能记录到 ID；
-// recovery 放在最外层兜底 panic。
+// Chain 的顺序很重要：请求 ID 必须最先注入，访问日志才能记录到 ID；
+// 恢复中间件放在最外层兜底 panic。
 func Chain(next http.Handler, logger *slog.Logger) http.Handler {
 	return recovery(requestIDs(logging(next, logger)), logger)
 }
@@ -56,7 +56,7 @@ func recovery(next http.Handler, logger *slog.Logger) http.Handler {
 	})
 }
 
-// RequestID 从 context 读取请求 ID。
+// RequestID 从上下文中读取请求 ID。
 func RequestID(ctx context.Context) string {
 	value, _ := ctx.Value(requestIDKey).(string)
 	return value

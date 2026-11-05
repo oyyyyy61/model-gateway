@@ -1,5 +1,5 @@
-// Package routing owns model instance selection, local concurrency limits and
-// the health state used by the proxy and the background health checker.
+// routing 包负责模型实例选择、本地并发限制，以及代理和后台健康探测
+// 共用的健康状态。
 package routing
 
 import (
@@ -10,7 +10,6 @@ import (
 
 // picker.go 负责实例选择、并发控制和健康状态；Proxy 和健康探测器共用同一个 Picker。
 
-// Instance describes one routable model instance.
 // Instance 描述一个可路由的模型实例。
 type Instance struct {
 	ID          string
@@ -20,7 +19,6 @@ type Instance struct {
 	MaxInflight int
 }
 
-// Snapshot is a point in time view of one instance, safe to return to callers.
 // Snapshot 是某一时刻的实例视图，用于指标和管理端点。
 type Snapshot struct {
 	ID          string
@@ -40,15 +38,13 @@ type state struct {
 	currentWeight int
 }
 
-// Picker selects instances with smooth weighted round robin.
-// Picker 使用平滑加权轮询选择实例；inflight channel 充当并发信号量。
+// Picker 使用平滑加权轮询选择实例；inflight 通道充当并发信号量。
 type Picker struct {
 	mu        sync.Mutex
 	instances []*state
 }
 
-// NewPicker validates the configuration and drops unusable instances.
-// NewPicker 校验 endpoint/权重/并发数，非法实例直接丢弃。
+// NewPicker 校验端点、权重和并发数，非法实例直接丢弃。
 func NewPicker(instances []Instance) *Picker {
 	states := make([]*state, 0, len(instances))
 	for _, instance := range instances {
@@ -60,7 +56,7 @@ func NewPicker(instances []Instance) *Picker {
 		states = append(states, &state{
 			instance: instance,
 			healthy:  true,
-			// inflight 是一个带缓冲的 channel，容量为 MaxInflight；
+			// inflight 是一个带缓冲的通道，容量为 MaxInflight；
 			// 发送一个空 struct 表示占用并发槽位，接收表示释放。
 			inflight: make(chan struct{}, instance.MaxInflight),
 		})
@@ -68,14 +64,11 @@ func NewPicker(instances []Instance) *Picker {
 	return &Picker{instances: states}
 }
 
-// Acquire reserves capacity on a healthy instance of the requested model.
 // Acquire 是 AcquireExcept 的便捷入口。
 func (p *Picker) Acquire(model string) (Instance, func(), bool) {
 	return p.AcquireExcept(model, nil)
 }
 
-// AcquireExcept is Acquire with an exclusion set, used by proxy failover to
-// avoid retrying the instance that just failed.
 // AcquireExcept 额外排除本次已尝试的实例，避免故障转移重复打同一个实例。
 func (p *Picker) AcquireExcept(model string, exclude map[string]struct{}) (Instance, func(), bool) {
 	// 上锁，防止并发请求同时修改 currentWeight。
@@ -112,7 +105,6 @@ func (p *Picker) AcquireExcept(model string, exclude map[string]struct{}) (Insta
 	return selected.instance, func() { <-selected.inflight }, true
 }
 
-// SetHealth updates the routing state for one instance.
 // SetHealth 由健康探测器和代理的连接失败调用。
 func (p *Picker) SetHealth(instanceID string, healthy bool) {
 	p.mu.Lock()
@@ -124,7 +116,6 @@ func (p *Picker) SetHealth(instanceID string, healthy bool) {
 	}
 }
 
-// Healthy reports how many healthy instances serve the model.
 // Healthy 返回指定模型的健康实例数。
 func (p *Picker) Healthy(model string) int {
 	p.mu.Lock()
@@ -138,7 +129,6 @@ func (p *Picker) Healthy(model string) int {
 	return count
 }
 
-// HealthyCount reports how many healthy instances exist across all models.
 // HealthyCount 返回所有模型的健康实例总数，供 /readyz 使用。
 func (p *Picker) HealthyCount() int {
 	p.mu.Lock()
@@ -152,7 +142,6 @@ func (p *Picker) HealthyCount() int {
 	return count
 }
 
-// Models returns the distinct models in stable order.
 // Models 返回去重并排序后的模型列表。
 func (p *Picker) Models() []string {
 	p.mu.Lock()
@@ -170,7 +159,6 @@ func (p *Picker) Models() []string {
 	return models
 }
 
-// Snapshot returns every configured instance, including unhealthy ones.
 // Snapshot 返回所有实例（含不健康），按 ID 排序，便于稳定输出。
 func (p *Picker) Snapshot() []Snapshot {
 	p.mu.Lock()

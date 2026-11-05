@@ -23,13 +23,13 @@ import (
 )
 
 // main.go 是网关进程入口：读取配置，构建鉴权、路由、指标、健康检查、代理和
-// HTTP handler，启动服务并在收到 SIGINT/SIGTERM 后优雅关闭。
+// HTTP 处理器，启动服务并在收到 SIGINT/SIGTERM 后优雅关闭。
 func main() {
 	// 配置读取：环境变量 → config.Config；默认值和解析规则在 internal/config/config.go。
 	cfg := config.Load()
 	logger := newLogger(cfg.LogLevel)
 
-	// API key 鉴权：每个配置项转成 auth.Key，只保存 SHA-256 哈希和策略。
+	// 租户 Key 鉴权：每个配置项转成 auth.Key，只保存 SHA-256 哈希和策略。
 	keys := make([]auth.Key, 0, len(cfg.APIKeys))
 	for _, item := range cfg.APIKeys {
 		key := auth.NewKey(item.Key, item.TenantID, item.Name, item.Models, item.RPM, item.DailyTokens)
@@ -99,7 +99,7 @@ func main() {
 		MaxBodyBytes:   cfg.MaxBodyBytes,
 		Metrics:        registry,
 	})
-	// HTTP handler：路由、认证、模型授权、限流/配额、指标和审计。
+	// HTTP 处理器：路由、认证、模型授权、限流/配额、指标和审计。
 	handler := gateway.NewHandler(gateway.HandlerConfig{
 		Proxy:      proxy,
 		Auth:       authService,
@@ -113,7 +113,7 @@ func main() {
 	// 中间件顺序：request id → 访问日志 → panic recovery（recovery 在最外层）。
 	root := middleware.Chain(handler, logger)
 
-	// HTTP 服务器：只设置读头超时和空闲超时；单请求超时由 Proxy 控制。
+	// HTTP 服务器：只设置读头超时和空闲超时；单请求超时由代理层控制。
 	server := &http.Server{
 		Addr:              cfg.ListenAddr,
 		Handler:           root,
@@ -151,14 +151,14 @@ func main() {
 
 	// 优雅关闭：先停健康探测器，再等待在途请求；Shutdown 的 ctx 是“最多等多久”的计时器。
 	shutdownContext, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-	// cancel 在 Shutdown 完成后调用，释放计时器资源。
+	// cancel 函数在 Shutdown 完成后调用，释放计时器资源。
 	defer cancel()
 	if err := server.Shutdown(shutdownContext); err != nil {
 		logger.Error("gateway shutdown failed", "error", err)
 	}
 }
 
-// upstreamClient 构建带连接池和超时的上游 HTTP 客户端；请求级超时由 Proxy 控制。
+// upstreamClient 构建带连接池和超时的上游 HTTP 客户端；请求级超时由代理层控制。
 func upstreamClient() *http.Client {
 	transport := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
@@ -173,7 +173,7 @@ func upstreamClient() *http.Client {
 	return &http.Client{Transport: transport}
 }
 
-// newLogger 输出 JSON 日志到 stdout，级别来自 MGW_LOG_LEVEL。
+// newLogger 输出 JSON 日志到标准输出，级别来自 MGW_LOG_LEVEL。
 func newLogger(level string) *slog.Logger {
 	var parsed slog.Level
 	switch strings.ToLower(level) {
@@ -189,7 +189,7 @@ func newLogger(level string) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: parsed}))
 }
 
-// boolFloat 把布尔值转成 Prometheus gauge 的 0/1。
+// boolFloat 把布尔值转成 Prometheus Gauge 指标的 0/1。
 func boolFloat(value bool) float64 {
 	if value {
 		return 1

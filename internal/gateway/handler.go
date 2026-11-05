@@ -24,7 +24,7 @@ import (
 // /v1/chat/completions 或 /v1/models/{model}/chat/completions 解析模型，执行认证、
 // 模型授权、RPM/每日配额，最后交给 Proxy 选实例转发，并记录指标和审计日志。
 
-// HandlerConfig wires the HTTP handler.
+// HandlerConfig 装配 HTTP 处理器；可选字段由 NewHandler 填默认值。
 type HandlerConfig struct {
 	Proxy      *Proxy
 	Auth       *auth.Service
@@ -36,7 +36,6 @@ type HandlerConfig struct {
 	Logger     *slog.Logger
 }
 
-// Handler implements the public gateway API and a small admin surface.
 // Handler 实现公开 API 和最小管理面。
 type Handler struct {
 	proxy      *Proxy
@@ -50,7 +49,6 @@ type Handler struct {
 	started    time.Time
 }
 
-// NewHandler applies safe defaults for optional configuration.
 // NewHandler 为 Limits/Metrics/Version/Logger 填默认值。
 func NewHandler(cfg HandlerConfig) http.Handler {
 	handler := &Handler{
@@ -79,7 +77,7 @@ func NewHandler(cfg HandlerConfig) http.Handler {
 	return handler
 }
 
-// ServeHTTP dispatches operational endpoints and the model API.
+// ServeHTTP 分发运维端点和模型 API。
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 运维端点不要求租户 Key；/metrics 直接输出 Prometheus 文本。
 	switch {
@@ -112,8 +110,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// 从请求头获取 Authorization，调用 Authenticate 认证，返回主体信息和 Key。
 	// 先认证再读 body：未认证请求不能触发大 body 缓冲。
-	// Authenticate before reading the body so unauthenticated callers cannot
-	// make the gateway buffer large payloads.
 	principal, key, authenticated := h.auth.Authenticate(r.Header.Get("Authorization"))
 	if !authenticated {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "invalid or missing API key", requestID(r))
@@ -186,7 +182,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if !result.ResponseStarted {
 			status = mappedStatus
 			statusLabel = code
-			// A cancelled client is already gone; writing an error body is futile.
+			// 客户端已取消，写错误响应没有意义。
 			if mappedStatus != 499 {
 				writeError(w, mappedStatus, code, message, requestID(r))
 			}
@@ -344,8 +340,6 @@ func modelFromPath(path string) (string, bool) {
 	return "", false
 }
 
-// readModelBody buffers an OpenAI request body so the handler can resolve the
-// model before proxying. The body is restored by the caller.
 // readModelBody 读取 body 并限制大小，返回 model；调用方负责把 body 放回 r.Body。
 func readModelBody(r *http.Request, limit int64) ([]byte, string, error) {
 	if limit <= 0 {

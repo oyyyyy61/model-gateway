@@ -1,10 +1,9 @@
-// Package version carries the build version of the gateway.
+// version 包提供网关的构建版本信息。
 //
-// Release builds override Version with:
+// 发布构建通过以下方式覆盖 Version：
 //
 //	go build -ldflags "-X github.com/oyyyyy61/model-gateway/internal/version.Version=vX.Y.Z"
 package version
 
-// Version is the human readable gateway version reported by /metrics and
-// /admin/status.
+// Version 是可读的网关版本号，会出现在 /metrics 和 /admin/status 中。
 var Version = "0.2.0"
